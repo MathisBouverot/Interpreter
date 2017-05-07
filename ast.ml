@@ -14,11 +14,10 @@ type exp =
     | CondExp of exp * exp * exp
     (* functions *)
     | FunExp of id * Types.type_exp * exp * Types.type_exp * string list (* free vars *)
+    | MultiFunExp of id list * Types.type_exp list * exp * Types.type_exp
     | AppExp of exp * exp
     (* expression sequences *)
     | SeqExp of exp list
-    (* program *)
-    | ProgExp of exp list
 
 and bind_exp = BindExp of id * exp
 
@@ -31,4 +30,3 @@ and value =
     | StrVal of string
     | BIFVal of (value -> value)
     | FunVal of id * exp * value Env.env
-    | ProgVal of value Env.env

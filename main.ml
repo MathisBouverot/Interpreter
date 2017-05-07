@@ -1,7 +1,9 @@
 #load "lexer.cmo";;
 #load "parser.cmo";;
-
-
+#load "env.cmo";;
+#load "builtins.cmo";;
+#load "passes.cmo";;
+#load "interpreter.cmo";;
 
 let file = "prog.txt" in
 let rec read_lines ?(str = "") in_chan =
@@ -18,5 +20,6 @@ let str = read_lines in_chan in
   print_string str;
   flush stdout;
   let tokens = Lexer.lex (Stream.of_string str) in
-  let prog = Parser.parse_defs tokens in
+  let prog = Parser.parse_exp tokens in
+  let prog = Passes.all_passes prog in
     prog

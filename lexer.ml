@@ -10,23 +10,26 @@ let rec lex = parser
     (* skip white space *)
     | [< ''\n'; stream >] -> (inc_line (); lex stream)
     | [< ' (' ' | '\t' | '\r' ); stream = lex >] -> stream
-    (* ident ::= [a-z][a-zA-Z0-9]* *)
+    (* ident ::= [a-z][a-zA-Z0-9_]* *)
     | [< ' ('a' .. 'z'  as head); stream >] -> begin
         let buff = Buffer.create 10 in
             Buffer.add_char buff head;
             lex_ident buff stream
     end
-    (* module ident ::= [A-Z][a-zA-Z0-9]* *)
+    (* module ident ::= [A-Z][a-zA-Z0-9_]* *)
     | [< ' ('A' .. 'Z' as head); stream >] -> begin
         let buff = Buffer.create 10 in
             Buffer.add_char buff head;
             lex_mident buff stream
     end
+    (* type ident ::= [''][a-zA-Z0-9_]* *)
     | [< ''\''; stream >] -> begin
         let buff = Buffer.create 10 in
             Buffer.add_char buff '\'';
             lex_tident buff stream
     end
+    (* string *)
+    | [< ' ('"'); stream >] -> lex_string (Buffer.create 10) stream
     (* float
         ::= [0-9]+ '.' [0-9]*
         ::= [0-9]* '.' [0-9]+
@@ -126,7 +129,7 @@ let rec lex = parser
 
 
 and lex_ident buff = parser
-    | [< ' ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' as head); stream >] ->
+    | [< ' ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' as head); stream >] ->
         Buffer.add_char buff head;
         lex_ident buff stream
     | [< stream >] -> match Buffer.contents buff with
@@ -148,14 +151,14 @@ and lex_ident buff = parser
 
 
 and lex_tident buff = parser
-    | [< ' ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' as head); stream >] ->
+    | [< ' ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' as head); stream >] ->
         Buffer.add_char buff head;
         lex_tident buff stream
     | [< stream >] -> [< 'Token.TIdent (Buffer.contents buff); lex stream >]
 
 
 and lex_mident buff =  parser
-    | [< ' ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' as head); stream >] ->
+    | [< ' ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' as head); stream >] ->
         Buffer.add_char buff head;
         lex_mident buff stream
     | [< stream >] -> [< 'Token.MIdent (Buffer.contents buff); lex stream >]

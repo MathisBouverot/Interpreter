@@ -36,46 +36,8 @@ Hashtbl.add binop_prec "/." 40;;
 let precedence op = try Hashtbl.find binop_prec op with Not_found -> -1;;
 
 
-(* defs
-   ::= bindexp ';' defs
-   ::= epsilon *)
-let rec parse_defs ?(acc = []) = parser
-    | [< 'Token.Var;
-        flags = parse_flags [];
-        e = parse_bindexp;
-        'Token.Punct ';' ?? "expected ';' after var expression"; stream >] ->
-        parse_defs ~acc:((flags, e) :: acc) stream
-    | [< >] -> acc
-
-
-(* flags
-   ::= ('rec'|'lazy')* *)
-and parse_flags acc = parser
-    | [< 'Token.Rec; stream >] ->
-        if List.mem Ast.Rec acc
-        then raise @@ Failure "duplicate flag 'rec'"
-        else parse_flags (Ast.Rec :: acc) stream
-    | [< 'Token.Lazy; stream >] ->
-        if List.mem Ast.Lazy acc
-        then raise @@ Failure "duplicate flag 'lazy'"
-        else parse_flags (Ast.Lazy :: acc) stream
-    | [< >] -> acc
-
-
-(* bindexp
-   ::= id '=' exp *)
-and parse_bindexp = parser
-    | [< 'Token.Ident id;
-        'Token.Punct '=' ?? "expected '=' after '" ^ id ^ "' in var expression";
-        e = parse_exp >] ->
-        Ast.BindExp (id, e)
-    | [< >] -> raise @@ Failure "expected identifier before '=' in var expression"
-
-
-
-and parse_exp = parser
+let rec parse_exp = parser
     | [< e1 = parse_primary; stream >] -> parse_arith_exp e1 stream
-
 
 and parse_arith_exp lhs = parser
     | [< 'Token.BinOp op1; rhs = parse_primary; stream >] -> begin
@@ -111,7 +73,6 @@ and parse_app callee = parser
    ::= '(' exp ')'
    ::= varexp
    ::= 'if' exp 'then' exp 'else' exp
-   ::= mid '::' id
    ::= unary_op primary_inner *)
 and parse_primary_inner = parser
     | [< 'Token.Bool b >] -> Ast.BoolExp b
@@ -133,16 +94,14 @@ and parse_primary_inner = parser
     (* funexp
         ::= Lambda '(' id ':' tid ')' ':' tid '->' expr args* *)
     | [< 'Token.Lambda; 'Token.Punct '(' ?? "expected '(' after '\'";
-        'Token.Ident id ?? "expected an identifier after '(' in lambda expression";
-        'Token.Punct ':' ?? "expected ':' after the identifier in lambda expression";
-        'Token.TIdent tid1 ?? "expected a type identifier after ':' in lambda expression";
-        'Token.Punct ')' ?? "expected ')' after the first type identifier in lambda expression";
+        args = parse_args [];
+        'Token.Punct ')' ?? "expected ')' after type identifier in lambda expression";
         'Token.Punct ':' ?? "expected ':' after ')' in lambda expression";
-        'Token.TIdent tid2 ?? "expected a type identifier after ':' in lambda expression";
+        'Token.TIdent tid ?? "expected a type identifier after ':' in lambda expression";
         'Token.BinOp "->" ?? "expected '->' after second type identifier in lambda expression";
         e = parse_exp >] ->
-        Ast.FunExp(id, type_of_tid tid1, e, type_of_tid tid2, [])
-
+        let ids, types = List.split args in
+            Ast.MultiFunExp(ids, types, e, type_of_tid tid)
     (* varexp
         ::= ('var' bindexp 'and')* 'var' bindexp 'in' exp *)
     | [< 'Token.Var; flags = parse_flags []; e = parse_bindexp; stream >] ->
@@ -150,6 +109,39 @@ and parse_primary_inner = parser
             | [< 'Token.In; e2 = parse_exp >] -> Ast.BindInExp (flags, e, e2)
             | [< >] -> raise @@ Failure "expected 'in' after expression in var binding"
         end stream
+
+and parse_args acc = parser
+    | [< 'Token.Ident id;
+        'Token.Punct ':' ?? "expected ':' after identifier in lambda expression";
+        'Token.TIdent tid ?? "expected a type identifier after ':' in lambda expression";
+        stream >] ->
+        parse_args ((id, type_of_tid tid) :: acc) stream
+    | [< 'Token.Punct ',';
+        stream >] ->
+        parse_args acc stream
+    | [< >] -> List.rev acc
+
+(* flags
+    ::= ('rec'|'lazy')* *)
+and parse_flags acc = parser
+    | [< 'Token.Rec; stream >] ->
+        if List.mem Ast.Rec acc
+        then raise @@ Failure "duplicate flag 'rec'"
+        else parse_flags (Ast.Rec :: acc) stream
+    | [< 'Token.Lazy; stream >] ->
+        if List.mem Ast.Lazy acc
+        then raise @@ Failure "duplicate flag 'lazy'"
+        else parse_flags (Ast.Lazy :: acc) stream
+    | [< >] -> acc
+
+(* bindexp
+   ::= id '=' exp *)
+and parse_bindexp = parser
+    | [< 'Token.Ident id;
+        'Token.Punct '=' ?? "expected '=' after '" ^ id ^ "' in var expression";
+        e = parse_exp >] ->
+        Ast.BindExp (id, e)
+    | [< >] -> raise @@ Failure "expected identifier before '=' in var expression"
 
 and type_of_tid = function
     | "'bool" -> Types.Bool
