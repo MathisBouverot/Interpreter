@@ -7,4 +7,4 @@ type type_exp =
     | String
     | Tuple of type_exp list
     | Function of type_exp * type_exp
-    | Module of type_exp Env.env;;
+    | Module of type_exp Env.env
