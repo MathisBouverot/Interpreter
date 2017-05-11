@@ -16,12 +16,6 @@ let rec lex = parser
             Buffer.add_char buff head;
             lex_ident buff stream
     end
-    (* module ident ::= [A-Z][a-zA-Z0-9_]* *)
-    | [< ' ('A' .. 'Z' as head); stream >] -> begin
-        let buff = Buffer.create 10 in
-            Buffer.add_char buff head;
-            lex_mident buff stream
-    end
     (* type ident ::= [''][a-zA-Z0-9_]* *)
     | [< ''\''; stream >] -> begin
         let buff = Buffer.create 10 in
@@ -105,6 +99,7 @@ let rec lex = parser
                     | [< ''.'; stream = lex >] -> [< 'Token.BinOp "==."; stream >]
                     | [< stream = lex >] -> [< 'Token.BinOp "=="; stream >]
                 end stream
+            | [< ''>'; stream = lex >] -> [< 'Token.BinOp "=>"; stream >]
             | [< >] -> [< 'Token.Punct '='; lex stream >]
         end stream
     (* bool_op *)
@@ -136,15 +131,10 @@ and lex_ident buff = parser
         | "if" -> [< 'Token.If; lex stream >]
         | "then" -> [< 'Token.Then; lex stream >]
         | "else" -> [< 'Token.Else; lex stream >]
+        | "type" -> [< 'Token.Type; lex stream >]
         | "var" -> [< 'Token.Var; lex stream >]
         | "in" -> [< 'Token.In; lex stream >]
-        | "and" -> [< 'Token.And; lex stream >]
         | "rec" -> [< 'Token.Rec; lex stream >]
-        | "lazy" -> [< 'Token.Lazy; lex stream >]
-        | "receive" -> [< 'Token.Receive; lex stream >]
-        | "after" -> [< 'Token.After; lex stream >]
-        | "module" -> [< 'Token.Module; lex stream >]
-        | "end" -> [< 'Token.End; lex stream >]
         | "true" -> [< 'Token.Bool true; lex stream >]
         | "false" -> [< 'Token.Bool false; lex stream >]
         | id -> [< 'Token.Ident id; lex stream >]
@@ -155,14 +145,6 @@ and lex_tident buff = parser
         Buffer.add_char buff head;
         lex_tident buff stream
     | [< stream >] -> [< 'Token.TIdent (Buffer.contents buff); lex stream >]
-
-
-and lex_mident buff =  parser
-    | [< ' ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' as head); stream >] ->
-        Buffer.add_char buff head;
-        lex_mident buff stream
-    | [< stream >] -> [< 'Token.MIdent (Buffer.contents buff); lex stream >]
-
 
 and lex_number buff read_dot read_digit = parser
     | [< ' ('0' .. '9' as head); stream >] ->

@@ -15,6 +15,8 @@ let rec all_passes exp =
 (* transform all the Ast.MultiFunExp into Ast.FunExp *)
 and unfold_funs = function
     | Ast.BoolExp _ | Ast.IntExp _ | Ast.FloatExp _ | Ast.StrExp _ | Ast.VarExp _ as exp -> exp
+    | Ast.TupleExp exps ->
+        Ast.TupleExp (List.map unfold_funs exps)
     | Ast.CondExp (pred, e1, e2) ->
         let pred' = unfold_funs pred in
         let e1' = unfold_funs e1 in
@@ -26,6 +28,9 @@ and unfold_funs = function
         let bind_exp' = Ast.BindExp (id, e1') in
         let e2' = unfold_funs e2 in
             Ast.BindInExp (flags, bind_exp', e2')
+    | Ast.TypeInExp (type_bind_exp, e2) ->
+        let e2' = unfold_funs e2 in
+            Ast.TypeInExp (type_bind_exp, e2')
     | Ast.AppExp (e1, e2) ->
         let e1' = unfold_funs e1 in
         let e2' = unfold_funs e2 in
@@ -54,6 +59,10 @@ and compute_fv = function
     | Ast.BoolExp _ | Ast.IntExp _ | Ast.FloatExp _ | Ast.StrExp _ as exp ->
         (exp, VarSet.empty)
     | Ast.VarExp var -> (Ast.VarExp var, VarSet.singleton var)
+    | Ast.TupleExp exps ->
+        let exps', exps_fv = List.split @@ List.map compute_fv exps in
+        let all_fv = List.fold_left VarSet.union VarSet.empty exps_fv in
+            (Ast.TupleExp exps', all_fv)
     | Ast.FunExp (arg, t1, e, t2, _) ->
         let e', e_fv = compute_fv e in
         let f_fv = VarSet.diff e_fv (VarSet.singleton arg) in
@@ -72,6 +81,9 @@ and compute_fv = function
         minus the one being bound *)
         let all_fv = VarSet.union (VarSet.diff e_fv bind_exp_bv) bind_exp_fv in
             (Ast.BindInExp (flags, bind_exp', e'), all_fv)
+    | Ast.TypeInExp (type_bind_exp, e) ->
+        let e', e_fv = compute_fv e in
+            (Ast.TypeInExp (type_bind_exp, e'), e_fv)
     | Ast.CondExp (pred, e1, e2) ->
         let pred', pred_fv = compute_fv pred in
         let e1', e1_fv = compute_fv e1 in

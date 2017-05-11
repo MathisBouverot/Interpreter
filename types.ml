@@ -5,6 +5,6 @@ type type_exp =
     | Int
     | Float
     | String
+    | TypeVar of string
     | Tuple of type_exp list
     | Function of type_exp * type_exp
-    | Module of type_exp Env.env

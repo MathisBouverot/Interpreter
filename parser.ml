@@ -55,7 +55,6 @@ and parse_arith_exp lhs = parser
 
 
 
-
 (* primary_exp
    ::= primary_inner+ *)
 and parse_primary = parser
@@ -65,13 +64,24 @@ and parse_app callee = parser
     | [< arg = parse_primary_inner; stream >] -> parse_app (Ast.AppExp (callee, arg)) stream
     | [< >] -> callee
 
+and parse_tuple acc = parser
+    | [< 'Token.Punct ','; e = parse_exp; stream >] ->
+        parse_tuple (e :: acc) stream
+    | [< >] -> Ast.TupleExp (List.rev acc)
+
+and parse_seq acc = parser
+    | [< 'Token.Punct ';'; e = parse_exp; stream >] ->
+        parse_seq (e :: acc) stream
+    | [< >] -> Ast.SeqExp (List.rev acc)
+
 (* primary_inner
    ::= boolexp
    ::= intexp
    ::= floatexp
    ::= stringexp
-   ::= '(' exp ')'
+   ::= '(' tupexp ')' | '(' seqexp ')'
    ::= varexp
+   ::= typeinexp
    ::= 'if' exp 'then' exp 'else' exp
    ::= unary_op primary_inner *)
 and parse_primary_inner = parser
@@ -81,27 +91,43 @@ and parse_primary_inner = parser
     | [< 'Token.String s >] -> Ast.StrExp s
     | [< 'Token.Ident id >] -> Ast.VarExp id
     | [< 'Token.UnOp op >] -> Ast.VarExp op
-    | [< 'Token.Punct '('; e = parse_exp; 'Token.Punct ')' ?? "unmatched '('"; stream >] -> begin
+    (* tuples and sequence expressions *)
+    | [< 'Token.Punct '('; e = parse_exp; stream >] -> begin
         match Stream.peek stream with
-            | Some(Token.Punct '(') | Some(Token.Ident _) | Some(Token.Bool _)
-            | Some(Token.Int _) | Some(Token.Float _) | Some(Token.String _) -> Ast.AppExp(e, parse_exp stream)
-            | _ -> e
+            | Some (Token.Punct ',') ->
+                let tup = parse_tuple [e] stream in
+                    begin parser
+                        | [< 'Token.Punct ')' >] -> tup
+                        | [< >] -> raise @@ Failure "unatched '('"
+                    end stream
+            | Some (Token.Punct ';') ->
+                let seq = parse_seq [e] stream in
+                    begin parser
+                        | [< 'Token.Punct ')' >] -> seq
+                        | [< >] -> raise @@ Failure "unmatched '('"
+                    end stream
+            | _ ->
+                begin parser
+                    | [< 'Token.Punct ')' >] -> e
+                    | [< >] -> raise @@ Failure "unmatched '('"
+                end stream
     end
+    (* conditional expression *)
     | [< 'Token.If; pred = parse_exp;
         'Token.Then ?? "expected 'then' after 'if'"; e1 = parse_exp;
         'Token.Else ?? "expected 'else' after 'then'"; e2 = parse_exp >] ->
         Ast.CondExp (pred, e1, e2)
     (* funexp
         ::= Lambda '(' id ':' tid ')' ':' tid '->' expr args* *)
-    | [< 'Token.Lambda; 'Token.Punct '(' ?? "expected '(' after '\'";
+    | [< 'Token.Lambda ; 'Token.Punct '(' ?? "expected '(' after '\'";
         args = parse_args [];
         'Token.Punct ')' ?? "expected ')' after type identifier in lambda expression";
         'Token.Punct ':' ?? "expected ':' after ')' in lambda expression";
-        'Token.TIdent tid ?? "expected a type identifier after ':' in lambda expression";
-        'Token.BinOp "->" ?? "expected '->' after second type identifier in lambda expression";
+        te = parse_type_exp ?? "expected a type expression after ':' in lambda expression";
+        'Token.BinOp "=>" ?? "2expected '=>' after return type expression in lambda expression";
         e = parse_exp >] ->
         let ids, types = List.split args in
-            Ast.MultiFunExp(ids, types, e, type_of_tid tid)
+            Ast.MultiFunExp(ids, types, e, te)
     (* varexp
         ::= ('var' bindexp 'and')* 'var' bindexp 'in' exp *)
     | [< 'Token.Var; flags = parse_flags []; e = parse_bindexp; stream >] ->
@@ -109,13 +135,19 @@ and parse_primary_inner = parser
             | [< 'Token.In; e2 = parse_exp >] -> Ast.BindInExp (flags, e, e2)
             | [< >] -> raise @@ Failure "expected 'in' after expression in var binding"
         end stream
+    | [< 'Token.Type; e1 = parse_type_bindexp; stream >] ->
+        begin parser
+            | [< 'Token.In; e2 = parse_exp >] -> Ast.TypeInExp (e1, e2)
+            | [< >] -> raise @@ Failure "expected 'in' after type expression in type definition"
+        end stream
+
 
 and parse_args acc = parser
     | [< 'Token.Ident id;
         'Token.Punct ':' ?? "expected ':' after identifier in lambda expression";
-        'Token.TIdent tid ?? "expected a type identifier after ':' in lambda expression";
+        te = parse_type_exp ?? "expected a type expression after ':' in lambda expression";
         stream >] ->
-        parse_args ((id, type_of_tid tid) :: acc) stream
+        parse_args ((id, te) :: acc) stream
     | [< 'Token.Punct ',';
         stream >] ->
         parse_args acc stream
@@ -128,10 +160,6 @@ and parse_flags acc = parser
         if List.mem Ast.Rec acc
         then raise @@ Failure "duplicate flag 'rec'"
         else parse_flags (Ast.Rec :: acc) stream
-    | [< 'Token.Lazy; stream >] ->
-        if List.mem Ast.Lazy acc
-        then raise @@ Failure "duplicate flag 'lazy'"
-        else parse_flags (Ast.Lazy :: acc) stream
     | [< >] -> acc
 
 (* bindexp
@@ -143,9 +171,47 @@ and parse_bindexp = parser
         Ast.BindExp (id, e)
     | [< >] -> raise @@ Failure "expected identifier before '=' in var expression"
 
+(* typebindexp
+   ::= tid '=' typeexp *)
+and parse_type_bindexp = parser
+    | [< 'Token.TIdent tid;
+        'Token.Punct '=' ?? "expected '=' after '" ^ tid ^ "' in type definition expression";
+        te = parse_type_exp >] ->
+        Ast.TypeBindExp (tid, te)
+    | [< >] ->
+        raise @@ Failure "expected type identifier before '=' in type definition expression"
+
+and parse_type_exp = parser
+    | [< te1 = parse_tuple_type []; stream >] ->
+        (* get rid of single element tuples *)
+        let te1 =
+            match te1 with
+                | Types.Tuple (t :: []) -> t
+                | _ -> te1
+        in
+        begin parser
+            | [< 'Token.BinOp "->" >] ->
+                let te2 = parse_type_exp stream in
+                    Types.Function (te1, te2)
+            | [< >] -> te1
+        end stream
+    | [< >] -> raise @@ Failure "invalid type expression"
+
+and parse_tuple_type acc = parser
+    | [< e = parse_primary_type; stream >] ->
+        let acc' = e :: acc in
+            parse_tuple_type acc' stream
+    | [< 'Token.BinOp "*"; stream >] ->
+        parse_tuple_type acc stream
+    | [< >] -> Types.Tuple (List.rev acc)
+
+and parse_primary_type = parser
+    | [< 'Token.Punct '('; e = parse_type_exp; 'Token.Punct ')' ?? "unmatched '('" >] -> e
+    | [< 'Token.TIdent tid >] -> type_of_tid tid
+
 and type_of_tid = function
     | "'bool" -> Types.Bool
     | "'int" -> Types.Int
     | "'float" -> Types.Float
     | "'string" -> Types.String
-    | t -> raise @@ Parse_error ("invalid type " ^ t);;
+    | t -> raise @@ Failure ("invalid type " ^ t)

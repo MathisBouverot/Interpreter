@@ -20,6 +20,7 @@ let str = read_lines in_chan in
   print_string str;
   flush stdout;
   let tokens = Lexer.lex (Stream.of_string str) in
-  let prog = Parser.parse_exp tokens in
-  let prog = Passes.all_passes prog in
-    prog
+  let e = Parser.parse_exp tokens in
+  let e = Passes.all_passes e in
+  let v = Interpreter.eval_prog e in
+    v

@@ -10,24 +10,41 @@ and eval_exp env = function
     (* variables and binding *)
     | Ast.VarExp var -> Env.lookup env var
     | Ast.BindInExp (flags, bind_exp, e) ->
-        let id, value = eval_bind_exp env bind_exp in
-        let env = Env.add env id value in
-            eval_exp env e
+        let id, value = eval_bind_exp env flags bind_exp in
+        let env' = Env.add env id value in
+            eval_exp env' e
+    | Ast.TypeInExp (_, e) ->
+        eval_exp env e
+    (* tuples *)
+    | Ast.TupleExp exps ->
+        let vals = List.map (eval_exp env) exps in
+            Ast.TupleVal vals
     (* functions *)
     | Ast.AppExp (e1, e2) -> begin
         let v1 = eval_exp env e1 in
         let v2 = eval_exp env e2 in
             match v1 with
-                | Ast.FunVal (id, sub_e1, f_env) ->
-                    let f_env' = Env.add f_env id v2 in
+                | Ast.FunVal (id, sub_e1, f_env_ref) ->
+                    let f_env' = Env.add !f_env_ref id v2 in
                         eval_exp f_env' sub_e1
                 | Ast.BIFVal f ->  f v2
-                | _ -> raise @@ Failure "eval_expr : application of an expression must be a function"
+                | _ -> raise @@ Failure "eval_exp : application of an expression must be a function"
     end
     | Ast.FunExp (x, t1, e, t2, fv_ids) ->
-        let fv_values = List.map (Env.lookup env) fv_ids in
+        (* create f_env containing all the ids in fv_ids,
+        minus the ones not in the current env (the function itself for instance);
+        undeclared identifiers should be found by type checker *)
+        let fv_id_values =
+            List.fold_left
+                (fun fv_values id ->
+                    try (id, Env.lookup env id) :: fv_values
+                    with Not_found -> fv_values)
+                []
+                fv_ids
+        in
+        let fv_ids, fv_values = List.split fv_id_values in
         let f_env = List.fold_left2 Env.add  Env.empty fv_ids fv_values in
-            Ast.FunVal (x, e, f_env)
+            Ast.FunVal (x, e, ref f_env)
     (* expression sequences *)
     | Ast.SeqExp [] -> raise @@ Failure "empty expression sequence"
     | Ast.SeqExp (e1 :: []) -> eval_exp env e1
@@ -42,12 +59,24 @@ and eval_exp env = function
             | _ -> raise @@ Failure "error while evaluating conditionnal expression"
     end
     | Ast.MultiFunExp _ -> raise @@ Failure "eval_exp"
-    
 
-and eval_bind_exp env bind_exp =
+
+and eval_bind_exp env flags bind_exp =
     let Ast.BindExp (id, e) = bind_exp in
     let v = eval_exp env e in
-        id, v
+    match v with
+        | Ast.FunVal (x, e, f_env) ->
+            let funval =
+                if not @@ List.mem Ast.Rec flags
+                then Ast.FunVal (x, e, f_env)
+                else
+                    (* f_env is already a ref *)
+                    let rec f_env' = f_env
+                    and funval = Ast.FunVal (x, e, f_env') in
+                    f_env' := Env.add (!f_env') id funval;
+                        funval
+            in id, funval
+        | v -> id, v
 
 and global_env =
     List.fold_left

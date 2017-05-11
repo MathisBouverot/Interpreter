@@ -1,8 +1,11 @@
+var fact = \(n : 'int) : 'int =>
+    if n <= 0 then 1
+    else n
+in fact 45
 
-
-var f =
-	\(a : 'int, b : 'int) : 'int ->
-		3 * a + 7 * !b 
-in f 1 2
-
-
+-<
+let rec env = ref None
+and closure = FunVal (id, e, env)
+in
+env := Env.add env f closure
+>-

@@ -1,19 +1,14 @@
 
 
 type token =
-    (* modules *)
-    | Module | End
     (* conditionals *)
-    | If | Then | Else 
-    (* message passing *)
-    | Receive | After
-    (* variable binding *)
-    | Var | In | And | Rec | Lazy
+    | If | Then | Else
+    (* type and variable binding *)
+    | Type | Var | In | Rec
     (* functions *)
     | Lambda
     (* identifier *)
     | Ident of string
-    | MIdent of string
     | TIdent of string
     (* data types *)
     | Bool of bool
@@ -26,4 +21,3 @@ type token =
     | Punct of char
     (* else *)
     | Kwd of char
-
