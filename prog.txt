@@ -1,11 +1,7 @@
-var fact = \(n : 'int) : 'int =>
-    if n <= 0 then 1
-    else n
-in fact 45
 
--<
-let rec env = ref None
-and closure = FunVal (id, e, env)
-in
-env := Env.add env f closure
->-
+var a = 1 in
+var b = 2 in
+var c = 3 in
+var is_2 = \(n : 'int) : 'bool =>
+    n - b == 0
+in is_2 5

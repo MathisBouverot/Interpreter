@@ -7,10 +7,15 @@ type instruction =
     | Bool of bool
     | String of string
     (* variables *)
-    | Bind of string
-    | Access of string
+    | Bind of int
+    | Access of int
+    (* allocate storage for n elements in the current memory *)
+    | Allocate of int
     (* closures *)
-    | Closure of string * instruction list * string list (* arg * closure code * free variables *)
+    (* closure code * number of free variables (taken on the stack) *)
+    | Closure of  instruction list * int
+    (* pop n closures and make them mutually recursive *)
+    | MakeRec of int
     | Return
     | Apply
     (* arithmetic :

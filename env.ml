@@ -1,15 +1,18 @@
 
-type 'a env = (string * 'a) list
-let empty : 'a env = []
+type 'a env = (string * 'a) list * int
 
-let rec lookup (env : 'a env) x =
+let empty : 'a env = [], 0
+
+let rec lookup ((env, size) : 'a env) x =
     match env with
-        | (y, value) :: _ when y = x -> value
         | [] -> raise Not_found
-        | _ :: env -> lookup env x
+        | (y, value) :: _ when y = x -> value
+        | _ :: env -> lookup (env, size) x
 
-let add (env : 'a env) x value =
-    (x, value) :: env
+let add ((env, size) : 'a env) x value =
+    ((x, value) :: env), size + 1
 
 let add_multiple env l =
     List.fold_left  (fun env (id, value) -> add env id value) l env
+
+let size ((_, size) : 'a env) = size

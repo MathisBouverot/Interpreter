@@ -1,4 +1,7 @@
 
+
+open Ast;;
+
 exception Parse_error of string;;
 
 let binop_prec = Hashtbl.create 30;;
@@ -48,8 +51,8 @@ and parse_arith_exp lhs = parser
                     then parse_arith_exp rhs stream
                     else rhs
                 in
-                parse_arith_exp (Ast.AppExp(Ast.AppExp((Ast.VarExp op1), lhs), rhs)) stream
-            | _ -> Ast.AppExp(Ast.AppExp((Ast.VarExp op1), lhs), rhs)
+                parse_arith_exp (BinOp (op1, lhs, rhs)) stream
+            | _ -> BinOp (op1, lhs, rhs)
     end
     | [< >] -> lhs
 
@@ -61,18 +64,18 @@ and parse_primary = parser
     | [< e = parse_primary_inner; stream >] -> parse_app e stream
 
 and parse_app callee = parser
-    | [< arg = parse_primary_inner; stream >] -> parse_app (Ast.AppExp (callee, arg)) stream
+    | [< arg = parse_primary_inner; stream >] -> parse_app (App (callee, arg)) stream
     | [< >] -> callee
 
 and parse_tuple acc = parser
     | [< 'Token.Punct ','; e = parse_exp; stream >] ->
         parse_tuple (e :: acc) stream
-    | [< >] -> Ast.TupleExp (List.rev acc)
+    | [< >] -> Tuple (List.rev acc)
 
 and parse_seq acc = parser
     | [< 'Token.Punct ';'; e = parse_exp; stream >] ->
         parse_seq (e :: acc) stream
-    | [< >] -> Ast.SeqExp (List.rev acc)
+    | [< >] -> Seq (List.rev acc)
 
 (* primary_inner
    ::= boolexp
@@ -85,12 +88,12 @@ and parse_seq acc = parser
    ::= 'if' exp 'then' exp 'else' exp
    ::= unary_op primary_inner *)
 and parse_primary_inner = parser
-    | [< 'Token.Bool b >] -> Ast.BoolExp b
-    | [< 'Token.Int n >] -> Ast.IntExp n
-    | [< 'Token.Float f >] -> Ast.FloatExp f
-    | [< 'Token.String s >] -> Ast.StrExp s
-    | [< 'Token.Ident id >] -> Ast.VarExp id
-    | [< 'Token.UnOp op >] -> Ast.VarExp op
+    | [< 'Token.Bool b >] -> Bool b
+    | [< 'Token.Int n >] -> Int n
+    | [< 'Token.Float f >] -> Float f
+    | [< 'Token.String s >] -> String s
+    | [< 'Token.Ident id >] -> Var id
+    | [< 'Token.UnOp op >] -> Var op
     (* tuples and sequence expressions *)
     | [< 'Token.Punct '('; e = parse_exp; stream >] -> begin
         match Stream.peek stream with
@@ -116,7 +119,7 @@ and parse_primary_inner = parser
     | [< 'Token.If; pred = parse_exp;
         'Token.Then ?? "expected 'then' after 'if'"; e1 = parse_exp;
         'Token.Else ?? "expected 'else' after 'then'"; e2 = parse_exp >] ->
-        Ast.CondExp (pred, e1, e2)
+        Cond (pred, e1, e2)
     (* funexp
         ::= Lambda '(' id ':' tid ')' ':' tid '->' expr args* *)
     | [< 'Token.Lambda ; 'Token.Punct '(' ?? "expected '(' after '\'";
@@ -127,17 +130,17 @@ and parse_primary_inner = parser
         'Token.BinOp "=>" ?? "2expected '=>' after return type expression in lambda expression";
         e = parse_exp >] ->
         let ids, types = List.split args in
-            Ast.MultiFunExp(ids, types, e, te)
+            MultiClosure(ids, types, e, te)
     (* varexp
         ::= ('var' bindexp 'and')* 'var' bindexp 'in' exp *)
     | [< 'Token.Var; flags = parse_flags []; e = parse_bindexp; stream >] ->
         begin parser
-            | [< 'Token.In; e2 = parse_exp >] -> Ast.BindInExp (flags, e, e2)
+            | [< 'Token.In; e2 = parse_exp >] -> BindIn (flags, e, e2)
             | [< >] -> raise @@ Failure "expected 'in' after expression in var binding"
         end stream
     | [< 'Token.Type; e1 = parse_type_bindexp; stream >] ->
         begin parser
-            | [< 'Token.In; e2 = parse_exp >] -> Ast.TypeInExp (e1, e2)
+            | [< 'Token.In; e2 = parse_exp >] -> TypeIn (e1, e2)
             | [< >] -> raise @@ Failure "expected 'in' after type expression in type definition"
         end stream
 
@@ -157,9 +160,9 @@ and parse_args acc = parser
     ::= ('rec'|'lazy')* *)
 and parse_flags acc = parser
     | [< 'Token.Rec; stream >] ->
-        if List.mem Ast.Rec acc
+        if List.mem Rec acc
         then raise @@ Failure "duplicate flag 'rec'"
-        else parse_flags (Ast.Rec :: acc) stream
+        else parse_flags (Rec :: acc) stream
     | [< >] -> acc
 
 (* bindexp
@@ -168,7 +171,7 @@ and parse_bindexp = parser
     | [< 'Token.Ident id;
         'Token.Punct '=' ?? "expected '=' after '" ^ id ^ "' in var expression";
         e = parse_exp >] ->
-        Ast.BindExp (id, e)
+        Bind (id, e)
     | [< >] -> raise @@ Failure "expected identifier before '=' in var expression"
 
 (* typebindexp
@@ -177,7 +180,7 @@ and parse_type_bindexp = parser
     | [< 'Token.TIdent tid;
         'Token.Punct '=' ?? "expected '=' after '" ^ tid ^ "' in type definition expression";
         te = parse_type_exp >] ->
-        Ast.TypeBindExp (tid, te)
+        TypeBind (tid, te)
     | [< >] ->
         raise @@ Failure "expected type identifier before '=' in type definition expression"
 

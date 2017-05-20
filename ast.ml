@@ -3,31 +3,33 @@ type id = string
 
 type exp =
     (* data types *)
-    | BoolExp of bool
-    | IntExp of int
-    | FloatExp of float
-    | StrExp of string
-    | TupleExp of exp list
+    | Bool of bool
+    | Int of int
+    | Float of float
+    | String of string
+    | Tuple of exp list
     (* variables and binding *)
-    | VarExp of id
-    | TypeInExp of type_bind_exp * exp
-    | BindInExp of flag list * bind_exp * exp
+    | Var of id
+    | TypeIn of type_bind_exp * exp
+    | BindIn of flag list * bind_exp * exp
     (* conditionals *)
-    | CondExp of exp * exp * exp
-    (* functions *)
-    | FunExp of id * Types.type_exp * exp * Types.type_exp * string list (* free vars *)
-    | MultiFunExp of id list * Types.type_exp list * exp * Types.type_exp
-    | AppExp of exp * exp
+    | Cond of exp * exp * exp
+    (* closures *)
+    | Closure of id * Types.type_exp * exp * Types.type_exp * string list (* free vars *)
+    | MultiClosure of id list * Types.type_exp list * exp * Types.type_exp
+    | App of exp * exp
+    (* operators *)
+    | BinOp of string * exp * exp
     (* expression sequences *)
-    | SeqExp of exp list
-and bind_exp = BindExp of id * exp
-and type_bind_exp = TypeBindExp of id * Types.type_exp
+    | Seq of exp list
+and bind_exp = Bind of id * exp
+and type_bind_exp = TypeBind of id * Types.type_exp
 and flag = Rec
-and value =
+(*and value =
     | BoolVal of bool
     | IntVal of int
     | FloatVal of float
     | StrVal of string
     | TupleVal of value list
     | BIFVal of (value -> value)
-    | FunVal of id * exp * value Env.env
+    | FunVal of id * exp * value Env.env*)

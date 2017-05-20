@@ -2,12 +2,13 @@
 
 type cell =
     (* unboxed *)
+    | Triv
     | Bool of bool
     | Int of int
     (* boxed *)
     | Float of float
-    | Closure of string * Instruction.instruction list * cell Env.env
+    | Closure of Instruction.instruction list * cell list
     | Tuple of cell list
     (* used by the abstract machine only *)
-    | Env of cell Env.env
+    | Mem of cell Memory.memory
     | Code of Instruction.instruction list;;

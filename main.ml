@@ -1,9 +1,21 @@
 #load "lexer.cmo";;
 #load "parser.cmo";;
 #load "env.cmo";;
-#load "builtins.cmo";;
 #load "passes.cmo";;
-#load "interpreter.cmo";;
+#load "codegen.cmo";;
+#load "cell.cmo";;
+#load "memory.cmo";;
+#load "evaluator.cmo";;
+
+
+open Instruction;;
+
+let rec stack_to_list stack acc = 
+  if Stack.is_empty stack then acc 
+  else
+    let top = Stack.pop stack in
+      stack_to_list stack (top :: acc);;
+
 
 let file = "prog.txt" in
 let rec read_lines ?(str = "") in_chan =
@@ -22,5 +34,6 @@ let str = read_lines in_chan in
   let tokens = Lexer.lex (Stream.of_string str) in
   let e = Parser.parse_exp tokens in
   let e = Passes.all_passes e in
-  let v = Interpreter.eval_prog e in
-    v
+  let code = Codegen.translate_prog e in
+  let s, m, c = Evaluator.reduce (Stack.create (), Memory.create 10 Cell.Triv, code) 30 in
+    stack_to_list s [], m, c
